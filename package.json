@@ -1,13 +1,16 @@
 {
-  "name": "fake-terminal2",
+  "name": "fake-terminal",
   "version": "0.0.0",
+  "main": "main.js",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
     "test": "ng test",
     "lint": "ng lint",
-    "e2e": "ng e2e"
+    "e2e": "ng e2e",
+    "start:electron": "ng build --base-href ./ && electron .",
+    "make": "electron-forge make"
   },
   "private": true,
   "dependencies": {
@@ -19,8 +22,10 @@
     "@angular/platform-browser": "~8.2.14",
     "@angular/platform-browser-dynamic": "~8.2.14",
     "@angular/router": "~8.2.14",
+    "ng-terminal": "^2.3.2",
     "rxjs": "~6.4.0",
     "tslib": "^1.10.0",
+    "xterm-addon-fit": "^0.3.0",
     "zone.js": "~0.9.1"
   },
   "devDependencies": {
@@ -28,10 +33,12 @@
     "@angular/cli": "~8.3.20",
     "@angular/compiler-cli": "~8.2.14",
     "@angular/language-service": "~8.2.14",
-    "@types/node": "~8.9.4",
+    "@electron-forge/cli": "^6.0.0-beta.47",
     "@types/jasmine": "~3.3.8",
     "@types/jasminewd2": "~2.0.3",
+    "@types/node": "~8.9.4",
     "codelyzer": "^5.0.0",
+    "electron": "^7.1.11",
     "jasmine-core": "~3.4.0",
     "jasmine-spec-reporter": "~4.2.1",
     "karma": "~4.1.0",
