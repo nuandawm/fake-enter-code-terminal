@@ -1,6 +1,10 @@
+import * as moment from 'moment';
 import { IpcRenderer } from 'electron';
-import { AfterViewInit, Component, OnInit, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { NgTerminal } from 'ng-terminal';
+import { BehaviorSubject, interval, Observable, Subject } from 'rxjs';
+import { Moment } from 'moment';
+import { filter, first, map, startWith, takeWhile } from 'rxjs/operators';
 
 @Component({
   selector: 'app-root',
@@ -8,12 +12,26 @@ import { NgTerminal } from 'ng-terminal';
   styleUrls: ['./app.component.css']
 })
 export class AppComponent implements OnInit, AfterViewInit {
-  @ViewChild('term', { static: true }) child: NgTerminal;
+  @ViewChild('term', { static: false }) child: NgTerminal;
+  @ViewChild('introvideo', {static: false})
+  set introvideo (el: ElementRef) {
+    this.videoPlayer = el ? el.nativeElement : null
+  }
 
-  private readonly ACTIVATION_CODE = '1234';
+  private readonly  ENTERED_CODE_MAX_LENGTH = 7;
+  private readonly ACTIVATION_CODE = '1234567';
+  private readonly TIMER_START_SECONDS = 120;
   private enteredCode = '';
   private attempts = 3;
   private ipc: IpcRenderer;
+  private isTerminalInputLocked = false;
+  private videoPlayer: HTMLVideoElement;
+  private isCountdownStopped = false;
+
+  gameState$: Subject<'intro' | 'console' | 'success' | 'fail'> = new BehaviorSubject('intro');
+  countDown$: Observable<Moment>;
+
+  constructor() {}
 
   private checkActivationCode() {
     return this.enteredCode === this.ACTIVATION_CODE;
@@ -29,22 +47,19 @@ export class AppComponent implements OnInit, AfterViewInit {
       this.child.write(`\r\n\nWrong activation code\r\n${this.attempts} attempts remaining`);
     } else {
       this.child.write(`\r\n\nNo more attempts!`);
+      this.isTerminalInputLocked = true;
+      this.isCountdownStopped = true; // FIXME
     }
   }
 
   private success() {
     this.child.write('\r\n\nYou made it! The code was correct!!!');
+
+    this.isTerminalInputLocked = true;
+    this.isCountdownStopped = true; // FIXME
   }
 
-  ngOnInit(): void {
-    try {
-      this.ipc = (window as any).require('electron').ipcRenderer;
-    } catch (e) {
-      throw e;
-    }
-  }
-
-  ngAfterViewInit(): void {
+  private initConsole() {
     this.child.underlying.focus();
     this.child.underlying.setOption('cursorBlink', true);
 
@@ -84,7 +99,10 @@ Checking connectivity... done.`);
 
           this.resetEnteredCode();
         }
-        this.child.write('\r\n\n$ ');
+
+        if (!this.isTerminalInputLocked) {
+          this.child.write('\r\n\n$ ');
+        }
       } else if (ev.keyCode === 8) {
         // Do not delete the prompt
         if (this.child.underlying.buffer.cursorX > 2) {
@@ -94,13 +112,49 @@ Checking connectivity... done.`);
         if (this.enteredCode.length > 0) {
           this.enteredCode = this.enteredCode.slice(0, -1);
         }
-      } else if (printable) {
+      } else if (printable && this.enteredCode.length < this.ENTERED_CODE_MAX_LENGTH
+        && !this.isTerminalInputLocked) {
         this.child.write(e.key);
 
         this.enteredCode += e.key;
       }
-
-      // console.log(this.enteredCode);
     });
+  }
+
+  ngOnInit(): void {
+    this.countDown$ = interval(1000).pipe(
+      map(index => this.TIMER_START_SECONDS - index - 1),
+      startWith(this.TIMER_START_SECONDS),
+      takeWhile(seconds => seconds >= 0 && !this.isCountdownStopped),
+      map(seconds => moment().hours(0).minutes(0).seconds(0).seconds(seconds))
+    );
+
+    try {
+      this.ipc = (window as any).require('electron').ipcRenderer;
+    } catch (e) {
+      console.error('Not an electron app:', e);
+    }
+  }
+
+  ngAfterViewInit(): void {
+    this.gameState$.pipe(
+      filter(gameState => gameState === 'intro'),
+      first() // Only once
+    ).subscribe(() => {
+      setTimeout(() => { // Manage ViewChild issues
+        this.videoPlayer.addEventListener('ended', (() => {
+          this.gameState$.next('console')
+        }) as EventListener);
+      }, 1);
+    });
+
+    this.gameState$.pipe(
+      filter(gameState => gameState === 'console'),
+      first() // Only once
+    ).subscribe(() => {
+      setTimeout(() => this.initConsole(), 1); // Manage ViewChild issues
+    });
+
+    this.gameState$.next('intro');
   }
 }
