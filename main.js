@@ -9,7 +9,8 @@ function createWindow () {
     webPreferences: {
       nodeIntegration: true
     },
-    fullscreen: true
+    fullscreen: true,
+    autoHideMenuBar: true
   });
 
   mainWindow.loadURL(
