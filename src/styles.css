@@ -18,6 +18,9 @@
     margin: 0;
 }*/
 
+@import url('https://fonts.googleapis.com/css?family=Nova+Mono&display=swap');
+@import url('https://fonts.googleapis.com/css?family=IBM+Plex+Mono&display=swap');
+
 body {
     height: 100vh;
     margin: 0;

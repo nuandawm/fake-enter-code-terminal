@@ -12,4 +12,16 @@
   </output>
 </pre-->
 
-<ng-terminal #term></ng-terminal>
+<ng-container *ngIf="(gameState$|async) === 'intro'">
+  <div class="flex-container">
+    <video autoplay style="height:100%" #introvideo>
+      <source src="assets/intro_video.ogg">
+    </video>
+  </div>
+</ng-container>
+
+<ng-container *ngIf="(gameState$|async) === 'console'">
+  <ng-terminal #term></ng-terminal>
+
+  <div class="countdown">{{countDown$|async | date:'HH:mm:ss'}}</div>
+</ng-container>

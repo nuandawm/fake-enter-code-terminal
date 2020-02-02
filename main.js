@@ -1,8 +1,10 @@
-const {app, BrowserWindow, ipcMain} = require('electron')
+const {app, BrowserWindow, ipcMain} = require('electron');
 const url = require("url");
 const path = require("path");
+const fs = require('fs');
+const dataurl = require('dataurl');
 
-let mainWindow
+let mainWindow;
 
 function createWindow () {
   mainWindow = new BrowserWindow({
@@ -26,6 +28,14 @@ function createWindow () {
   mainWindow.on('closed', function () {
     mainWindow = null
   });
+
+  /*const filePath = 'Sad_Trombone-Joe_Lamb-665429450.mp3';
+  const failSoundFile = new Promise((resolve, reject) => {
+    fs.readFile(filePath, (err, data) => {
+      if (err) { reject(err); }
+      resolve(dataurl.convert({ data, mimetype: 'audio/mp3' }));
+    });
+  });*/
 }
 
 app.on('ready', createWindow);
