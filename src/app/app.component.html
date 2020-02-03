@@ -14,8 +14,8 @@
 
 <ng-container *ngIf="(gameState$|async) === 'intro'">
   <div class="flex-container">
-    <video autoplay style="height:100%" #introvideo>
-      <source src="assets/intro_video.ogg">
+    <video controls autoplay style="height:100%; border:0" #introvideo>
+      <source src="assets/intro_video.mp4">
     </video>
   </div>
 </ng-container>
@@ -24,4 +24,12 @@
   <ng-terminal #term></ng-terminal>
 
   <div class="countdown">{{countDown$|async | date:'HH:mm:ss'}}</div>
+
+  <ng-container *ngIf="gameEnding === 'fail'">
+    <audio autoplay src="assets/sad_trombone.mp3"></audio>
+  </ng-container>
+
+  <ng-container *ngIf="gameEnding === 'success'">
+    <audio autoplay src="assets/ff7_victory.ogg"></audio>
+  </ng-container>
 </ng-container>

@@ -6,6 +6,13 @@ import { BehaviorSubject, interval, Observable, Subject } from 'rxjs';
 import { Moment } from 'moment';
 import { filter, first, map, startWith, takeWhile } from 'rxjs/operators';
 
+const HELP_MESSAGES = [
+  'Help message number 1',
+  'Help message number 2',
+  'Help message number 3',
+  'No more help messages, sorry'
+];
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
@@ -27,9 +34,11 @@ export class AppComponent implements OnInit, AfterViewInit {
   private isTerminalInputLocked = false;
   private videoPlayer: HTMLVideoElement;
   private isCountdownStopped = false;
+  private helpMessageIndex = 0;
 
-  gameState$: Subject<'intro' | 'console' | 'success' | 'fail'> = new BehaviorSubject('intro');
+  gameState$: Subject<'intro' | 'console'> = new BehaviorSubject('intro');
   countDown$: Observable<Moment>;
+  gameEnding: 'fail' | 'success';
 
   constructor() {}
 
@@ -49,6 +58,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       this.child.write(`\r\n\nNo more attempts!`);
       this.isTerminalInputLocked = true;
       this.isCountdownStopped = true; // FIXME
+      this.gameEnding = 'fail';
     }
   }
 
@@ -57,6 +67,7 @@ export class AppComponent implements OnInit, AfterViewInit {
 
     this.isTerminalInputLocked = true;
     this.isCountdownStopped = true; // FIXME
+    this.gameEnding = 'success';
   }
 
   private initConsole() {
@@ -89,12 +100,19 @@ Checking connectivity... done.`);
         if (this.enteredCode.length > 0) {
           if (this.enteredCode === 'puppa') {
             this.ipc.send('quit-app');
-          }
+          } else if (this.enteredCode === 'help') {
 
-          if (this.checkActivationCode()) {
-            this.success();
+            if (this.helpMessageIndex < HELP_MESSAGES.length) {
+              this.child.write(`\r\n\n${HELP_MESSAGES[this.helpMessageIndex]}`);
+              this.helpMessageIndex += 1;
+            }
+
           } else {
-            this.fail();
+            if (this.checkActivationCode()) {
+              this.success();
+            } else {
+              this.fail();
+            }
           }
 
           this.resetEnteredCode();
