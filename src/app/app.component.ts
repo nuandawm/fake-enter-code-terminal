@@ -6,16 +6,30 @@ import { BehaviorSubject, interval, Observable, Subject, zip } from 'rxjs';
 import { Moment } from 'moment';
 import { concatMap, filter, first, map, startWith, take, takeWhile, tap } from 'rxjs/operators';
 
+const ACTIVATION_CODE = '4158193';
+const ENTERED_CODE_MAX_LENGTH = 7;
+
 const HELP_MESSAGES = [
   'Uno dei membri dell\'equipaggio ha un evidente difetto fisico',
   'Uno dei membri dell\'equipaggio non vede la figlia da quando è nata',
-  'Per scoprire il numero di uno dei membri dell\'equipaggio può essere utile provare a guardare le cose da un\'altra prospettiva',
-  'Hai terminato gli aiuti'
+  'Per scoprire il numero di uno dei membri dell\'equipaggio può essere utile provare a guardare le cose da un\'altra prospettiva'
 ];
+
+// Time to wait before to show each help message
+const HELP_TIME_THRESHOLDS = [
+  5 * 60,  // 5 minutes
+  10 * 60, // 10 minutes
+  15 * 60  // 15 minutes
+];
+
+const NO_MORE_HELP_MESSAGES_MESSAGE = 'Hai terminato gli aiuti';
+const WAIT_FOR_HELP_MESSAGES_MESSAGE = 'Informazioni di aiuto non disponibili, caricamento in corso...';
 
 const VICTORY_MESSAGE = '\r\n\nMisure d\'emergenza attivate.\r\nSiete liberi di tornare sulla terra';
 const FAIL_MESSAGE = '\r\n\nMisure d\'emergenza disattivate.\r\nMissione fallita';
 const SLOW_TEXT_DELAY = 20;
+const ZERO_MOMENT: Moment = moment().year(2012).month(12).day(21).hours(0).minutes(0).seconds(0);
+const TIMER_START_SECONDS = 30 * 60; // 30 minutes
 
 interface SlowWriter {
   defaultDelay: number;
@@ -61,9 +75,6 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.videoPlayer = el ? el.nativeElement : null
   }
 
-  private readonly ENTERED_CODE_MAX_LENGTH = 7;
-  private readonly ACTIVATION_CODE = '4158193';
-  private readonly TIMER_START_SECONDS = 30 * 60; // 30 minutes
   private enteredCode = '';
   private attempts = 3;
   private ipc: IpcRenderer;
@@ -74,13 +85,13 @@ export class AppComponent implements OnInit, AfterViewInit {
   private newSlowWriter: SlowWriter;
 
   gameState$: Subject<'intro' | 'console'> = new BehaviorSubject('intro');
-  countDown$: Observable<Moment>;
+  countDown$: BehaviorSubject<Moment> = new BehaviorSubject<Moment>(null);
   gameEnding: 'fail' | 'success';
 
   constructor() {}
 
   private checkActivationCode() {
-    return this.enteredCode === this.ACTIVATION_CODE;
+    return this.enteredCode === ACTIVATION_CODE;
   }
 
   private resetEnteredCode() {
@@ -146,15 +157,22 @@ Switching language... fatto.`, 5);
         && ev.code !== 'ArrowRight'
         && ev.code !== 'Tab';
 
-      if (ev.keyCode === 13) {
+      if (ev.keyCode === 13) { // Enter key pressed
         if (this.enteredCode.length > 0) {
-          if (this.enteredCode === 'puppa') {
-            this.ipc.send('quit-app');
-          } else if (this.enteredCode === 'aiuto') {
+          if (this.enteredCode === 'aiuto') {
 
             if (this.helpMessageIndex < HELP_MESSAGES.length) {
-              this.newSlowWriter.write(`\r\n\n${HELP_MESSAGES[this.helpMessageIndex]}`);
-              this.helpMessageIndex += 1;
+              const remainingSeconds = moment.duration(this.countDown$.getValue().diff(moment(ZERO_MOMENT))).as('seconds');
+              const diffSeconds = remainingSeconds - (TIMER_START_SECONDS - HELP_TIME_THRESHOLDS[this.helpMessageIndex]);
+              if (diffSeconds < 0) {
+                this.newSlowWriter.write(`\r\n\n${HELP_MESSAGES[this.helpMessageIndex]}`);
+                this.helpMessageIndex += 1;
+              } else {
+                this.newSlowWriter.write(`\r\n\n${WAIT_FOR_HELP_MESSAGES_MESSAGE}`);
+                this.newSlowWriter.write(`\r\n${diffSeconds} secondi rimanenti.`);
+              }
+            } else {
+              this.newSlowWriter.write(`\r\n\n${NO_MORE_HELP_MESSAGES_MESSAGE}`);
             }
 
           } else if (this.enteredCode.match(/[^\d]+/g)) {
@@ -182,8 +200,9 @@ Switching language... fatto.`, 5);
         if (this.enteredCode.length > 0) {
           this.enteredCode = this.enteredCode.slice(0, -1);
         }
-      } else if (printable && this.enteredCode.length < this.ENTERED_CODE_MAX_LENGTH
+      } else if (printable && this.enteredCode.length < ENTERED_CODE_MAX_LENGTH
         && !this.isTerminalInputLocked) {
+        // Write in the terminal
         this.newSlowWriter.write(e.key);
 
         this.enteredCode += e.key;
@@ -192,9 +211,9 @@ Switching language... fatto.`, 5);
   }
 
   ngOnInit(): void {
-    this.countDown$ = interval(1000).pipe(
-      map(index => this.TIMER_START_SECONDS - index - 1),
-      startWith(this.TIMER_START_SECONDS),
+    interval(1000).pipe(
+      map(index => TIMER_START_SECONDS - index - 1),
+      startWith(TIMER_START_SECONDS),
       takeWhile(seconds => seconds >= 0 && !this.isCountdownStopped),
       tap(seconds => {
         // Time's UP!
@@ -204,8 +223,8 @@ Switching language... fatto.`, 5);
           this.newSlowWriter.write(FAIL_MESSAGE);
         }
       }),
-      map(seconds => moment().hours(0).minutes(0).seconds(0).seconds(seconds))
-    );
+      map(seconds => moment(ZERO_MOMENT).seconds(seconds))
+    ).subscribe(this.countDown$);
 
     try {
       this.ipc = (window as any).require('electron').ipcRenderer;
@@ -234,5 +253,14 @@ Switching language... fatto.`, 5);
     });
 
     this.gameState$.next('intro');
+  }
+
+  skipVideo() {
+    this.videoPlayer.pause();
+    this.gameState$.next('console');
+  }
+
+  quitApp() {
+    this.ipc.send('quit-app');
   }
 }
