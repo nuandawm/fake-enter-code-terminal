@@ -15,6 +15,39 @@ const HELP_MESSAGES = [
 
 const VICTORY_MESSAGE = '\r\n\nMisure d\'emergenza attivate.\r\nSiete liberi di tornare sulla terra';
 const FAIL_MESSAGE = '\r\n\nMisure d\'emergenza disattivate.\r\nMissione fallita';
+const SLOW_TEXT_DELAY = 20;
+
+interface SlowWriter {
+  defaultDelay: number;
+  getEmitter(): Observable<string>;
+  write(message: string, delay?: number): void;
+}
+
+class SlowWriterFactory {
+  static createWriter(defaultDelay: number): SlowWriter {
+    const message$ = new Subject();
+    const emitter$: Observable<string> = message$.pipe(
+      concatMap(([message, delay]) => {
+        const length = message.length;
+
+        return interval(delay).pipe(
+          take(length - 1),
+          map(index => index + 1),
+          startWith(0),
+          map(index => message[index]),
+        )
+      })
+    );
+
+    return {
+      defaultDelay: defaultDelay,
+      getEmitter: () => emitter$,
+      write: function(message, delay) {
+        message$.next([message, delay ? delay : this.defaultDelay])
+      }
+    }
+  }
+}
 
 @Component({
   selector: 'app-root',
@@ -38,8 +71,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   private videoPlayer: HTMLVideoElement;
   private isCountdownStopped = false;
   private helpMessageIndex = 0;
-  private slowWriter$ = new Subject<string>();
-  private slowWriterDelayer$ = new Subject<number>();
+  private newSlowWriter: SlowWriter;
 
   gameState$: Subject<'intro' | 'console'> = new BehaviorSubject('intro');
   countDown$: Observable<Moment>;
@@ -58,12 +90,12 @@ export class AppComponent implements OnInit, AfterViewInit {
   private fail() {
     this.attempts -= 1;
     if (this.attempts > 0) {
-      this.slowWriting(`\r\n\nCodice di attivazione errato\r\n${this.attempts} tentativi rimasti`);
+      this.newSlowWriter.write(`\r\n\nCodice di attivazione errato\r\n${this.attempts} tentativi rimasti`);
     } else {
       this.isTerminalInputLocked = true;
       this.isCountdownStopped = true; // FIXME
       this.gameEnding = 'fail';
-      this.slowWriting(FAIL_MESSAGE);
+      this.newSlowWriter.write(FAIL_MESSAGE);
     }
   }
 
@@ -71,14 +103,17 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.isTerminalInputLocked = true;
     this.isCountdownStopped = true; // FIXME
     this.gameEnding = 'success';
-    this.slowWriting(VICTORY_MESSAGE);
+    this.newSlowWriter.write(VICTORY_MESSAGE);
   }
 
   private initConsole() {
     this.terminal.underlying.focus();
     this.terminal.underlying.setOption('cursorBlink', true);
 
-    this.slowWriting(`
+    this.newSlowWriter = SlowWriterFactory.createWriter(SLOW_TEXT_DELAY);
+    this.newSlowWriter.getEmitter().subscribe(character => this.terminal.write(character));
+
+    this.newSlowWriter.write(`
   _____          _        ____ ____    _____   ____     _____  ___  \r
  |  ___|__ _ __ (_)_  __ | __ )___ \\  | ____| / ___|   |___ / / _ \\ \r
  | |_ / _ \\ '_ \\| \\ \\/ / |  _ \\ __) | |  _|   \\___ \\     |_ \\| | | |\r
@@ -97,10 +132,10 @@ remote: Total 1857 (delta 0), reused 0 (delta 0)\r
 Receiving objects: 100% (1857/1857), 374.35 KiB | 268.00 KiB/s, done.\r
 Resolving deltas: 100% (772/772), done.\r
 Checking connectivity... done.\r
-Switching language... fatto.`);
+Switching language... fatto.`, 5);
 
-    this.slowWriting('\r\n\nInserire il codice per inizializzare le misure di sicurezza:');
-    this.slowWriting('\r\n\n$ ');
+    this.newSlowWriter.write('\r\n\nInserire il codice per inizializzare le misure di sicurezza:', 5);
+    this.newSlowWriter.write('\r\n\n$ ');
 
     this.terminal.keyEventInput.subscribe(e => {
       const ev = e.domEvent;
@@ -118,12 +153,12 @@ Switching language... fatto.`);
           } else if (this.enteredCode === 'aiuto') {
 
             if (this.helpMessageIndex < HELP_MESSAGES.length) {
-              this.slowWriting(`\r\n\n${HELP_MESSAGES[this.helpMessageIndex]}`);
+              this.newSlowWriter.write(`\r\n\n${HELP_MESSAGES[this.helpMessageIndex]}`);
               this.helpMessageIndex += 1;
             }
 
           } else if (this.enteredCode.match(/[^\d]+/g)) {
-            this.slowWriting(`\r\n\n${this.enteredCode}: comando non trovato`);
+            this.newSlowWriter.write(`\r\n\n${this.enteredCode}: comando non trovato`);
           } else {
             if (this.checkActivationCode()) {
               this.success();
@@ -136,12 +171,12 @@ Switching language... fatto.`);
         }
 
         if (!this.isTerminalInputLocked) {
-          this.slowWriting('\r\n\n$ ');
+          this.newSlowWriter.write('\r\n\n$ ');
         }
       } else if (ev.keyCode === 8) {
         // Do not delete the prompt
         if (this.terminal.underlying.buffer.cursorX > 2) {
-          this.slowWriting('\b \b');
+          this.newSlowWriter.write('\b \b');
         }
 
         if (this.enteredCode.length > 0) {
@@ -149,18 +184,11 @@ Switching language... fatto.`);
         }
       } else if (printable && this.enteredCode.length < this.ENTERED_CODE_MAX_LENGTH
         && !this.isTerminalInputLocked) {
-        this.slowWriting(e.key);
+        this.newSlowWriter.write(e.key);
 
         this.enteredCode += e.key;
       }
     });
-  }
-  
-  private slowWriting(message: string) {
-    for (let character of message) {
-      this.slowWriter$.next(character);
-      this.slowWriterDelayer$.next(message.length);
-    }
   }
 
   ngOnInit(): void {
@@ -173,7 +201,7 @@ Switching language... fatto.`);
         if (seconds === 0) {
           this.isTerminalInputLocked = true;
           this.gameEnding = 'fail';
-          this.slowWriting(FAIL_MESSAGE);
+          this.newSlowWriter.write(FAIL_MESSAGE);
         }
       }),
       map(seconds => moment().hours(0).minutes(0).seconds(0).seconds(seconds))
@@ -206,12 +234,5 @@ Switching language... fatto.`);
     });
 
     this.gameState$.next('intro');
-    
-    // Slow writing
-    zip(this.slowWriter$, this.slowWriterDelayer$.pipe(
-      concatMap(length => interval(5).pipe(take(length)))
-    )).pipe(
-      map(([character, index]) => character)
-    ).subscribe(character => this.terminal.write(character));
   }
 }
