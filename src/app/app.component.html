@@ -14,10 +14,10 @@
   <div class="quit-app" (click)="quitApp()"></div>
 
   <ng-container *ngIf="gameEnding === 'fail'">
-    <audio autoplay src="assets/sad_trombone.mp3"></audio>
+    <audio autoplay src="assets/ending_failure.mpeg"></audio>
   </ng-container>
 
   <ng-container *ngIf="gameEnding === 'success'">
-    <audio autoplay src="assets/ff7_victory.ogg"></audio>
+    <audio autoplay src="assets/ending_victory.mpeg"></audio>
   </ng-container>
 </ng-container>
